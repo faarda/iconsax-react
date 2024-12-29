@@ -66,28 +66,59 @@ const convertElementInsideSvgToReactElement = (svgFile, isNative) => {
   return final;
 };
 
+// const loopAllVariant = (iconsAllVariant, isNative) => {
+//   const loop = iconsAllVariant.map((iav) => {
+//     return `const ${iav.variant} = ({color}) => (<>${convertElementInsideSvgToReactElement(
+//       iav.svgFile,
+//       isNative,
+//     )}</>)`;
+//   });
+//   return loop.join('\n\n');
+// };
+
 const loopAllVariant = (iconsAllVariant, isNative) => {
   const loop = iconsAllVariant.map((iav) => {
-    return `const ${iav.variant} = ({color}) => (<>${convertElementInsideSvgToReactElement(
-      iav.svgFile,
-      isNative,
-    )}</>)`;
+    const isLinear = iav.variant === 'Linear';
+    return `const ${iav.variant} = ({ color${isLinear ? ', strokeWidth' : ''} }) => (
+      <>${convertElementInsideSvgToReactElement(iav.svgFile, isNative).replace(
+        isLinear ? /<svg/g : '',
+        `<svg stroke-width={strokeWidth}`,
+      )}</>
+    )`;
   });
   return loop.join('\n\n');
 };
+
+// const switchStatementForVariants = (iconsAllVariant) => {
+//   const cases = iconsAllVariant.map(
+//     (iav) => `
+//   case '${iav.variant}':
+//     return <${iav.variant} color={color} />
+//     `,
+//   );
+//   return `const chooseVariant = (variant, color) => {
+//     switch (variant) {
+//       ${cases.join('')}
+//         default:
+//         return <Linear color={color} />
+//     }
+//   };`;
+// };
 
 const switchStatementForVariants = (iconsAllVariant) => {
   const cases = iconsAllVariant.map(
     (iav) => `
   case '${iav.variant}':
-    return <${iav.variant} color={color} />
+    return <${iav.variant} color={color}${
+      iav.variant === 'Linear' ? ' strokeWidth={strokeWidth}' : ''
+    } />
     `,
   );
-  return `const chooseVariant = (variant, color) => {
+  return `const chooseVariant = (variant, color, strokeWidth) => {
     switch (variant) {
       ${cases.join('')}
         default:
-        return <Linear color={color} />
+        return <Linear color={color} strokeWidth={strokeWidth} />
     }
   };`;
 };
@@ -99,9 +130,79 @@ export interface IconProps extends SVGAttributes<SVGElement> {
   ref?: Ref<SVGSVGElement>;
   color?: string;
   size?: string | number;
+  strokeWidth?: string | number; // Optional prop
 }
 export type Icon = FC<IconProps>;
 `;
+
+// const react = async (icons) => {
+//   console.log('----- generating icons -> react');
+//   const builtSourceDir = path.join(packageDir, 'iconsax-react', 'src');
+//   await fs.writeFile(path.join(builtSourceDir, 'index.js'), '', 'utf-8');
+//   await fs.writeFile(
+//     path.join(builtSourceDir, 'index.d.ts'),
+//     format(initialTypeDefinitions),
+//     'utf-8',
+//   );
+
+//   icons.categories.forEach(async (category) => {
+//     category.icons.forEach(async (icon) => {
+//       const iconsAllVariant = icons.variants.map((variant) => {
+//         const svgFile = readFileSync(path.join(IconsDir, variant, category.name, icon));
+//         return { variant, svgFile };
+//       });
+
+//       let ComponentName = cc(icon.replace('.svg', ''), { pascalCase: true });
+
+//       if (ComponentName.match(/^\d/)) {
+//         ComponentName = 'I' + ComponentName;
+//       }
+//       const element = `
+//        import React, {forwardRef} from 'react';
+//        import PropTypes from 'prop-types';
+
+//        ${loopAllVariant(iconsAllVariant)}
+
+//        ${switchStatementForVariants(iconsAllVariant)}
+
+//        const ${ComponentName} =
+//        forwardRef(({ variant , color, size , ...rest }, ref) => {
+//           return (
+//               <svg {...rest} xmlns="http://www.w3.org/2000/svg" ref={ref} width={size} height={size} viewBox="0 0 24 24" fill="none">
+//               {chooseVariant(variant, color)}
+//               </svg>)
+//        });
+//        ${ComponentName}.propTypes = {
+//         variant: PropTypes.oneOf(['Linear', 'Bold', 'Broken', 'Bulk', 'Outline', 'TwoTone']),
+//         color: PropTypes.string,
+//         size: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+//        }
+//        ${ComponentName}.defaultProps = {
+//         variant: 'Linear',
+//         color: 'currentColor',
+//         size: '24'
+//        }
+//        ${ComponentName}.displayName = '${ComponentName}'
+
+//        export default ${ComponentName}
+//        `;
+
+//       await fs.writeFile(
+//         path.join(builtSourceDir, `${ComponentName}.js`),
+//         format(element),
+//         'utf-8',
+//       );
+
+//       // add export component to index.js
+//       const exportString = `export { default as ${ComponentName} } from './${ComponentName}.js';\r\n`;
+//       await fs.appendFile(path.join(builtSourceDir, 'index.js'), exportString, 'utf-8');
+
+//       // add type definition for component in index.d.ts
+//       const exportTypeString = `export const ${ComponentName}: Icon;\n`;
+//       await fs.appendFile(path.join(builtSourceDir, 'index.d.ts'), exportTypeString, 'utf-8');
+//     });
+//   });
+// };
 
 const react = async (icons) => {
   console.log('----- generating icons -> react');
@@ -126,7 +227,7 @@ const react = async (icons) => {
         ComponentName = 'I' + ComponentName;
       }
       const element = `
-       import React, {forwardRef} from 'react';
+       import React, { forwardRef } from 'react';
        import PropTypes from 'prop-types';
 
        ${loopAllVariant(iconsAllVariant)}
@@ -134,21 +235,32 @@ const react = async (icons) => {
        ${switchStatementForVariants(iconsAllVariant)}
 
        const ${ComponentName} =
-       forwardRef(({ variant , color, size , ...rest }, ref) => {
+       forwardRef(({ variant, color, size, strokeWidth, ...rest }, ref) => {
           return (
-              <svg {...rest} xmlns="http://www.w3.org/2000/svg" ref={ref} width={size} height={size} viewBox="0 0 24 24" fill="none">
-              {chooseVariant(variant, color)}
-              </svg>)
+              <svg
+                {...rest}
+                xmlns="http://www.w3.org/2000/svg"
+                ref={ref}
+                width={size}
+                height={size}
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+              {chooseVariant(variant, color, strokeWidth)}
+              </svg>
+          );
        });
        ${ComponentName}.propTypes = {
         variant: PropTypes.oneOf(['Linear', 'Bold', 'Broken', 'Bulk', 'Outline', 'TwoTone']),
         color: PropTypes.string,
         size: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+        strokeWidth: PropTypes.number, // Optional prop
        }
        ${ComponentName}.defaultProps = {
         variant: 'Linear',
         color: 'currentColor',
-        size: '24'
+        size: 24,
+        strokeWidth: 1.5, // Default strokeWidth only affects Linear variant
        }
        ${ComponentName}.displayName = '${ComponentName}'
 
@@ -161,16 +273,17 @@ const react = async (icons) => {
         'utf-8',
       );
 
-      // add export component to index.js
+      // Add export component to index.js
       const exportString = `export { default as ${ComponentName} } from './${ComponentName}.js';\r\n`;
       await fs.appendFile(path.join(builtSourceDir, 'index.js'), exportString, 'utf-8');
 
-      // add type definition for component in index.d.ts
+      // Add type definition for component in index.d.ts
       const exportTypeString = `export const ${ComponentName}: Icon;\n`;
       await fs.appendFile(path.join(builtSourceDir, 'index.d.ts'), exportTypeString, 'utf-8');
     });
   });
 };
+
 const nativeInitialTypeDefinitions = `/// <reference types="react" />
 import { FC, Component, Ref } from 'react';
 import { SvgProps } from 'react-native-svg';
@@ -180,9 +293,79 @@ export interface IconProps extends SvgProps {
   ref?: Ref<Component<SvgProps>>;
   color?: string;
   size?: string | number;
+  strokeWidth?: string | number;
 }
 export type Icon = FC<IconProps>;
 `;
+
+// const reactNative = async (icons) => {
+//   console.log('----- generating icons -> react native');
+//   const builtSourceDir = path.join(packageDir, 'iconsax-react-native', 'src');
+//   await fs.writeFile(path.join(builtSourceDir, 'index.js'), '', 'utf-8');
+//   await fs.writeFile(
+//     path.join(builtSourceDir, 'index.d.ts'),
+//     format(nativeInitialTypeDefinitions),
+//     'utf-8',
+//   );
+//   icons.categories.forEach(async (category) => {
+//     category.icons.forEach(async (icon) => {
+//       const iconsAllVariant = icons.variants.map((variant) => {
+//         const svgFile = readFileSync(path.join(IconsDir, variant, category.name, icon));
+//         return { variant, svgFile };
+//       });
+
+//       let ComponentName = cc(icon.replace('.svg', ''), { pascalCase: true });
+
+//       if (ComponentName.match(/^\d/)) {
+//         ComponentName = 'I' + ComponentName;
+//       }
+//       const element = `
+//          import React, {forwardRef} from 'react';
+//          import PropTypes from 'prop-types';
+//          import Svg, {  Path, G } from 'react-native-svg';
+
+//          ${loopAllVariant(iconsAllVariant, true)}
+
+//          ${switchStatementForVariants(iconsAllVariant)}
+
+//          const ${ComponentName} =
+//          forwardRef(({ variant , color, size , ...rest }, ref) => {
+//             return (
+//                 <Svg {...rest} xmlns="http://www.w3.org/2000/svg" ref={ref} width={size} height={size} viewBox="0 0 24 24" fill="none">
+//                 {chooseVariant(variant, color)}
+//                 </Svg>)
+//          });
+//          ${ComponentName}.propTypes = {
+//           variant: PropTypes.oneOf(['Linear', 'Bold', 'Broken', 'Bulk', 'Outline', 'TwoTone']),
+//           color: PropTypes.string,
+//           size: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+//          }
+//          ${ComponentName}.defaultProps = {
+//           variant: 'Linear',
+//           color: 'currentColor',
+//           size: '24'
+//          }
+//          ${ComponentName}.displayName = '${ComponentName}'
+//          export default ${ComponentName}
+//          `;
+
+//       await fs.writeFile(
+//         path.join(builtSourceDir, `${ComponentName}.js`),
+//         format(element),
+//         'utf-8',
+//       );
+
+//       // add export component to index.js
+//       const exportString = `export { default as ${ComponentName} } from './${ComponentName}.js';\r\n`;
+//       await fs.appendFile(path.join(builtSourceDir, 'index.js'), exportString, 'utf-8');
+
+//       // add type definition for component in index.d.ts
+//       const exportTypeString = `export const ${ComponentName}: Icon;\n`;
+//       await fs.appendFile(path.join(builtSourceDir, 'index.d.ts'), exportTypeString, 'utf-8');
+//     });
+//   });
+// };
+
 const reactNative = async (icons) => {
   console.log('----- generating icons -> react native');
   const builtSourceDir = path.join(packageDir, 'iconsax-react-native', 'src');
@@ -192,6 +375,7 @@ const reactNative = async (icons) => {
     format(nativeInitialTypeDefinitions),
     'utf-8',
   );
+
   icons.categories.forEach(async (category) => {
     category.icons.forEach(async (icon) => {
       const iconsAllVariant = icons.variants.map((variant) => {
@@ -204,33 +388,46 @@ const reactNative = async (icons) => {
       if (ComponentName.match(/^\d/)) {
         ComponentName = 'I' + ComponentName;
       }
+
       const element = `
          import React, {forwardRef} from 'react';
          import PropTypes from 'prop-types';
-         import Svg, {  Path, G } from 'react-native-svg';
+         import Svg, { Path, G } from 'react-native-svg';
 
          ${loopAllVariant(iconsAllVariant, true)}
 
          ${switchStatementForVariants(iconsAllVariant)}
 
          const ${ComponentName} =
-         forwardRef(({ variant , color, size , ...rest }, ref) => {
+         forwardRef(({ variant, color, size, strokeWidth, ...rest }, ref) => {
             return (
-                <Svg {...rest} xmlns="http://www.w3.org/2000/svg" ref={ref} width={size} height={size} viewBox="0 0 24 24" fill="none">
-                {chooseVariant(variant, color)}
-                </Svg>)
+                <Svg
+                  {...rest}
+                  xmlns="http://www.w3.org/2000/svg"
+                  ref={ref}
+                  width={size}
+                  height={size}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                {chooseVariant(variant, color, strokeWidth)}
+                </Svg>
+            );
          });
          ${ComponentName}.propTypes = {
           variant: PropTypes.oneOf(['Linear', 'Bold', 'Broken', 'Bulk', 'Outline', 'TwoTone']),
           color: PropTypes.string,
           size: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+          strokeWidth: PropTypes.number, // Optional prop
          }
          ${ComponentName}.defaultProps = {
           variant: 'Linear',
           color: 'currentColor',
-          size: '24'
+          size: 24,
+          strokeWidth: 1.5, // Default strokeWidth only affects Linear variant
          }
          ${ComponentName}.displayName = '${ComponentName}'
+
          export default ${ComponentName}
          `;
 
@@ -240,16 +437,17 @@ const reactNative = async (icons) => {
         'utf-8',
       );
 
-      // add export component to index.js
+      // Add export component to index.js
       const exportString = `export { default as ${ComponentName} } from './${ComponentName}.js';\r\n`;
       await fs.appendFile(path.join(builtSourceDir, 'index.js'), exportString, 'utf-8');
 
-      // add type definition for component in index.d.ts
+      // Add type definition for component in index.d.ts
       const exportTypeString = `export const ${ComponentName}: Icon;\n`;
       await fs.appendFile(path.join(builtSourceDir, 'index.d.ts'), exportTypeString, 'utf-8');
     });
   });
 };
+
 const generateIcons = {
   react,
   'react-native': reactNative,
